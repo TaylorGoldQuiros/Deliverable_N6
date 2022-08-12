@@ -14,6 +14,7 @@ library(multcompView) # making posthoc tests easier to view and plot
 library(car)
 library(ggpubr)
 library(cowplot)
+library(readxl)
 
 #create a theme for all plots
 
@@ -57,7 +58,7 @@ Small_Fish_GLM <- glm(log_n_effort ~ SITE * AREA,
 
 anova(Small_Fish_GLM)
 
-plot(Small_Fish_GLM)
+#plot(Small_Fish_GLM)
 
 #estimating marginal mean w/in model. showing means (response column) standard error and confidence intervals  
 
@@ -75,6 +76,7 @@ smallfish_SITE.cld2 <- subset(smallfish_SITE.cld2)
 
 smallfish_AREA.cld2$.group <- gsub(" ", "", smallfish_AREA.cld2$.group)
 smallfish_AREA.cld2 <- subset(smallfish_AREA.cld2)
+
 
 
 dev.new()
@@ -99,7 +101,7 @@ dev.new()
     scale_fill_brewer(palette = "Spectral") +
     labs(x= "Habitat", y = expression(Abundance~(log[10]))) +
     scale_x_discrete()+
-    scale_y_log10() +
+#    scale_y_log10() +
     facet_wrap(~AREA))
 
 #PLOT Sites X Habitats
@@ -122,7 +124,7 @@ dev.new()
     scale_fill_brewer(palette = "Spectral") +
     labs(x= "Habitat", y = expression(Abundance~(log[10]))) +
     scale_x_discrete()+
-    scale_y_log10() +
+#    scale_y_log10() +
     facet_wrap(~factor(SITE, level = level.order)))
 
 
