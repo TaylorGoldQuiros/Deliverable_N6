@@ -36,12 +36,19 @@ theme_set(theme_bw() +
 
 options(scipen = 999)
 
-# Onboarding data
-
+###Small fish###----
+## Onboarding data
+# Import excel file, change SITE to an ordered factor, then change AREA to
+# an ordered factor:
 smallfish <- data.frame(read_excel("0_Data/Smallfish_CLEAN.xlsx")) %>%
     mutate(SITE = ordered(SITE, levels = c("WS", "DL", "GC", "BG"))) %>%
     mutate(AREA = ordered(AREA, levels = c("Backwater", "Inner meander bend",
                           "Outer meander bend", "Sidechannel", "Riffle"))) 
+
+
+# Rearrange to a wider format, remove unneeded rows, replace NA with 0 for math
+# purposes, add all the fish, divide by effort, and create a log transformed 
+# value of CPUE
 
 new_smallfish <- pivot_wider(smallfish, names_from = "Species", values_from = "n") %>%
     select(2:5, 8:13) %>% 
@@ -49,73 +56,83 @@ new_smallfish <- pivot_wider(smallfish, names_from = "Species", values_from = "n
     mutate(sum = Dace + LNDC + LNSU + LSSU + RMCOT + RSSH) %>%
     mutate(n_effort = sum/X..of.pulls) %>%
     mutate(log_n_effort = log(n_effort + 1))
-#Subsetting by species
 
-#smallfish<-subset(smallfish, Species=="RSSH")
+##Modeling and exploring data
 
-# Level order for sites x axis
-
-
-#### GLMs ####
-
-fish.glm <- glm(n_effort ~ SITE * AREA,
+fish.glm <- glm(n_effort ~ SITE + AREA,
                  data = new_smallfish,
                  family = Gamma(link="log"))
 
-Anova(fish.glm)
+par(mfrow = c(2,2)) # Makes diagnostic plots show as 2 x 2 grid
+plot(fish.glm) # Diagnostic plots
+Anova(fish.glm) # ANOVA
 
-par(mfrow = c(2,2))
-plot(fish.glm)
+fish.emm <- emmeans(fish.glm, ~ SITE, type = "response")
+fish.cld <- cld(fish.emm, alpha = 0.05, Letters = letters)
 
-fish.glm2 <- glm(log_n_effort ~ SITE * AREA,
+(plot.fish <- ggplot() +
+    geom_jitter(data = new_smallfish, 
+                aes(x = SITE, y = n_effort), size = 1.5, width = 0.2, 
+                color = "gray") +
+    geom_errorbar(data = fish.cld,
+                  aes(x = SITE, ymin = lower.CL, ymax = upper.CL, width = 0)) +
+    geom_point(data = fish.cld,
+               aes(x = SITE, y = response), shape = 1, size = 7) +
+    geom_text(data = fish.cld, 
+              aes(x = SITE, 
+                  y = response,
+                  label = .group, 
+                  vjust = -0.5, hjust = -0.5), 
+              position = position_dodge(0.75),
+              size = 6,) +
+    #theme(axis.title.x=element_blank()) +
+    labs(x= "Habitat", y = "CPUE (Fish/seine pull)")+
+    scale_x_discrete()+
+    scale_y_log10())
+
+# Diagnostic plots show residuals are uneven around the axis. May be driven by 
+# outliers, but still is concerning. Also, when taking the model forward to
+# emmeans and cld, it results in a plot where the means are outside of where
+# the majority of the data are residing. Looks very suspect if your central 
+# tendency isn't central. 
+
+fish.glm2 <- glm(log_n_effort ~ SITE + AREA,
                       data = new_smallfish,
                       family = Gamma(link="log"))
 
+plot(fish.glm2) # Looks better, but not great. Will do emm and cld for reference
 Anova(fish.glm2)
 
-par(mfrow = c(2,2))
-plot(fish.glm2)
+fish.emm2 <- emmeans(fish.glm2, ~ SITE, type = "response")
+
+fish.cld2 <- cld(fish.emm2, alpha = 0.05, Letters = letters)
 
 
-#estimating marginal mean w/in model. showing means (response column) standard error and confidence intervals  
 
-Small_Fish_GLM2 <- glm(log_n_effort ~ SITE + AREA,
+fish.glm3 <- glm(log_n_effort ~ SITE + AREA,
                       data = new_smallfish,
-                      family = Gamma(link="identity"),
-                      na.action=na.omit)
+                      family = Gamma(link = "identity"))
 
-Anova(Small_Fish_GLM2)
-plot(Small_Fish_GLM2)
+plot(fish.glm3) # Residuals look good. Going with this as log link on log 
+                # transformed data feels like a lot of log.
+Anova(fish.glm3)
 
-smallfish.emm2 <- emmeans(Small_Fish_GLM2, ~ SITE, type = "response")
+fish.emm3 <- emmeans(fish.glm3, ~ SITE, type = "response")
 
-smallfish_SITE.cld2 <- cld(smallfish.emm2, alpha = 0.05, Letters = letters)
-
-smallfish.emm3 <- emmeans(Small_Fish_GLM2, ~ AREA, type = "response")
-
-smallfish_AREA.cld3 <- cld(smallfish.emm3, alpha = 0.05, Letters = letters)
-
-
-#this is to allow for tidy plotting and to easily pull from output 
-
-smallfish_SITE.cld2$.group <- gsub(" ", "", smallfish_SITE.cld2$.group)
-smallfish_SITE.cld2 <- subset(smallfish_SITE.cld2)
-
-smallfish_AREA.cld3$.group <- gsub(" ", "", smallfish_AREA.cld3$.group)
-smallfish_AREA.cld3 <- subset(smallfish_AREA.cld3)
+fish.cld3 <- cld(fish.emm3, alpha = 0.05, Letters = letters)
 
 #PLOT Sites
 
 (plot_smallfish_site <- ggplot() +
     geom_jitter(data = new_smallfish, 
-                aes(x = SITE, y = exp(log_n_effort)-1), size = 1.5, width = 0.2, 
+                aes(x = SITE, y = n_effort), size = 1.5, width = 0.2, 
                 color = "gray") +
-    geom_errorbar(data = smallfish_SITE.cld2,
+    geom_errorbar(data = fish.cld3,
                   aes(x = SITE, ymin = (exp(lower.CL)-1), ymax = 
                           (exp(upper.CL))-1), width = 0) +
-    geom_point(data = smallfish_SITE.cld2,
+    geom_point(data = fish.cld3,
                aes(x = SITE, y = (exp(emmean))- 1), shape = 1, size = 7) +
-    geom_text(data = smallfish_SITE.cld2, 
+    geom_text(data = fish.cld3, 
               aes(x = SITE, y = exp(emmean) - 1,
                   label = .group, 
                   vjust = -0.5, hjust = -0.5), 
@@ -134,17 +151,6 @@ smallfish_AREA.cld3 <- subset(smallfish_AREA.cld3)
     geom_jitter(data = new_smallfish, 
                     aes(x = AREA, y = (n_effort)), size = 1.5, width = 0.2, 
                     color = "gray") +
-    # geom_errorbar(data = smallfish_AREA.cld3,
-    #               aes(x = AREA, ymin = (exp(lower.CL)-1), ymax = (exp(upper.CL)-1)), width = 0) +
-    # geom_point(data = smallfish_AREA.cld3,
-    #            aes(x = AREA, y = (exp(emmean)-1)), shape = 1, size = 7) +
-    # geom_text(data = smallfish_AREA.cld3, 
-    #           aes(x = AREA, y = (exp(emmean)-1),
-    #               label = .group, 
-    #               vjust = 0, hjust = 0), 
-    #           position = position_dodge(0.75),
-    #           size = 6,) +
-    #theme(axis.title.x=element_blank()) +
     labs(x= "Habitat", y = "CPUE (Fish/seine pull)") +
     scale_x_discrete() +
     scale_y_log10())
@@ -160,15 +166,22 @@ save_plot("./3_Output/plot_smallfish_habitat.png", plot_smallfish_habitat,
           base_height = 4)
 
 
-##########
-
+####Stats on linear models for bigfish data######
+# Onboard data
 bigfish <- data.frame(read_excel("0_Data/Browntrout length frequency.xlsx", 
                                  skip = 1)) %>%
-    mutate(Site = ordered(Site, levels = c("WS", "DL", "GC", "BG")),
-           Avg.length.mm. = "ave_length", .keep = "unused") 
+    mutate(Site = ordered(Site, levels = c("WS", "MR", "BM"))) 
+
+# Run regressions for each site using lapply to make a list by applying a 
+# function, "function(x)" to let it know you're going to do a function with
+# arguments, lm to call a linear model, then a generic version of the function 
+# for the bigfish object, and namely, for each Site in the object. Then, pull 
+# out the stats using lapply again.
+
+regression_list <- lapply(unique(bigfish$Site),
+                         function(x) lm(Avg.length..mm. ~ Year, bigfish[bigfish$Site==x,]))
 
 
-
-
-
-
+regression_stats <- lapply(regression_list, summary)
+names(regression_stats) <- c("WS", "MR", "BM")
+regression_stats
